@@ -1,0 +1,3 @@
+apiserver:
+  address: ":8001"
+  loglevel: "debug"
