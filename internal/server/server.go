@@ -2,12 +2,10 @@ package server
 
 import (
 	"github.com/endr-i/promo-back-go/internal/config"
+	"github.com/endr-i/promo-back-go/internal/connection/pg"
 	"github.com/endr-i/promo-back-go/internal/transport/rest"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
-	"time"
 )
 
 type Server struct {
@@ -23,7 +21,7 @@ func New(config *config.Config) *Server {
 	return &Server{
 		config: config,
 		logger: logger,
-		rest:   rest.New(&config.Rest, logger, &rest.Services{}),
+		rest:   nil,
 	}
 }
 
@@ -33,6 +31,10 @@ func (s *Server) Start() error {
 	}
 
 	if err := s.connectDB(); err != nil {
+		return err
+	}
+
+	if err := s.configureTransport(); err != nil {
 		return err
 	}
 
@@ -62,21 +64,19 @@ func (s *Server) configureLogger() error {
 }
 
 func (s *Server) connectDB() error {
-	dbConfig, err := pgx.ParseConfig(s.config.PG.ConnectionString)
+	db, err := pg.NewDB(s.config.PG)
+
 	if err != nil {
 		return err
 	}
 
-	dbConfig.ConnectTimeout = time.Duration(s.config.PG.ConnectTimeout) * time.Millisecond
-	dbConfig.PreferSimpleProtocol = s.config.PG.PreferSimpleProtocol
+	s.pg = db
 
-	db := stdlib.OpenDB(*dbConfig)
-	pg := sqlx.NewDb(db, "pgx")
+	return nil
+}
 
-	pg.SetMaxOpenConns(s.config.PG.MaxOpenConns)
-	pg.SetMaxIdleConns(s.config.PG.MaxIdleConns)
-
-	s.pg = pg
+func (s *Server) configureTransport() error {
+	s.rest = rest.New(&s.config.Rest, s.logger, s.pg)
 
 	return nil
 }
